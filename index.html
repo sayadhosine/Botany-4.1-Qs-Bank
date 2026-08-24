@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Protected Document Viewer</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:#202124;font-family:Arial,sans-serif;overflow:hidden}
+#toolbar{height:52px;background:#111;color:#fff;display:flex;align-items:center;gap:8px;padding:6px 10px;position:fixed;top:0;left:0;right:0;z-index:100}
+#toolbar button{border:1px solid #555;background:#2b2b2b;color:#fff;border-radius:6px;min-width:40px;height:38px;font-size:18px;cursor:pointer}
+#toolbar button:active{transform:scale(.96)}
+#title{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+#status{font-size:12px;opacity:.75;white-space:nowrap}
+#viewer{position:absolute;top:52px;bottom:0;left:0;right:0;overflow:auto;padding:12px 8px 35px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.pageWrap{display:flex;justify-content:center;margin:0 auto 12px;touch-action:pan-x pan-y pinch-zoom}
+canvas{background:#fff;display:block;box-shadow:0 1px 5px rgba(0,0,0,.55);max-width:none}
+#wm{position:fixed;right:10px;bottom:8px;font-size:11px;color:rgba(255,255,255,.4);z-index:110;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button id="minus" aria-label="Zoom out">−</button>
+  <button id="reset" aria-label="Reset zoom">100%</button>
+  <button id="plus" aria-label="Zoom in">+</button>
+  <div id="title">Protected Document</div>
+  <div id="status">Loading…</div>
+</div>
+<div id="viewer"></div>
+<div id="wm">Viewing copy • Download/print controls hidden</div>
+
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+
+const viewer=document.getElementById("viewer");
+const status=document.getElementById("status");
+let pdf=null, zoom=1, rendering=false;
+
+function setButton(){
+  document.getElementById("reset").textContent=Math.round(zoom*100)+"%";
+}
+async function renderAll(){
+  if(!pdf || rendering) return;
+  rendering=true;
+  viewer.innerHTML="";
+  status.textContent=`Loading ${pdf.numPages} pages…`;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  for(let n=1;n<=pdf.numPages;n++){
+    const page=await pdf.getPage(n);
+    const base=page.getViewport({scale:1});
+    const width=Math.min(Math.max(window.innerWidth-16,280),1100);
+    const fit=width/base.width;
+    const viewport=page.getViewport({scale:fit*zoom});
+    const wrap=document.createElement("div");
+    wrap.className="pageWrap";
+    const canvas=document.createElement("canvas");
+    canvas.width=Math.ceil(viewport.width*dpr);
+    canvas.height=Math.ceil(viewport.height*dpr);
+    canvas.style.width=Math.ceil(viewport.width)+"px";
+    canvas.style.height=Math.ceil(viewport.height)+"px";
+    wrap.appendChild(canvas);
+    viewer.appendChild(wrap);
+    const ctx=canvas.getContext("2d");
+    await page.render({canvasContext:ctx,viewport,transform:dpr!==1?[dpr,0,0,dpr,0,0]:null}).promise;
+  }
+  status.textContent=`${pdf.numPages} pages`;
+  rendering=false;
+}
+async function load(){
+  try{
+    pdf=await pdfjsLib.getDocument("document.pdf").promise;
+    await renderAll();
+  }catch(e){
+    status.textContent="Unable to load document";
+    console.error(e);
+  }
+}
+document.getElementById("plus").onclick=async()=>{if(zoom<2.5){zoom=Math.min(2.5,zoom+.25);setButton();await renderAll();}};
+document.getElementById("minus").onclick=async()=>{if(zoom>0.5){zoom=Math.max(.5,zoom-.25);setButton();await renderAll();}};
+document.getElementById("reset").onclick=async()=>{zoom=1;setButton();await renderAll();};
+let timer;
+window.addEventListener("resize",()=>{clearTimeout(timer);timer=setTimeout(renderAll,250)});
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&["s","p","u"].includes(e.key.toLowerCase()))e.preventDefault();
+  if(e.key==="F12")e.preventDefault();
+});
+document.addEventListener("contextmenu",e=>e.preventDefault());
+setButton();load();
+</script>
+</body>
+</html>
