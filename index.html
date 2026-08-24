@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Protected Document</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#222;color:#fff;font-family:Arial,sans-serif}
+#bar{position:sticky;top:0;z-index:10;height:48px;background:#111;display:flex;align-items:center;justify-content:space-between;padding:0 12px}
+#title{font-size:14px}
+#status{font-size:12px;opacity:.75}
+#pages{padding:10px 0 30px}
+.page{display:block;margin:0 auto 12px;max-width:100%;height:auto;box-shadow:0 1px 5px #000;background:#fff}
+#wm{position:fixed;right:10px;bottom:8px;font-size:11px;color:rgba(255,255,255,.45);z-index:20;pointer-events:none}
+</style>
+</head>
+<body oncontextmenu="return false">
+<div id="bar"><div id="title">Protected Document</div><div id="status">Loading…</div></div>
+<div id="pages"></div>
+<div id="wm">Viewing copy • Download/print controls hidden</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+
+const url = "document.pdf";
+const pages = document.getElementById("pages");
+const status = document.getElementById("status");
+
+try {
+  const pdf = await pdfjsLib.getDocument(url).promise;
+  status.textContent = pdf.numPages + " pages";
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({scale:1});
+    const maxWidth = Math.min(window.innerWidth - 16, 1100);
+    const scale = (maxWidth / base.width) * dpr;
+    const viewport = page.getViewport({scale});
+    const canvas = document.createElement("canvas");
+    canvas.className = "page";
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    canvas.style.width = Math.ceil(viewport.width/dpr) + "px";
+    canvas.style.height = Math.ceil(viewport.height/dpr) + "px";
+    pages.appendChild(canvas);
+    await page.render({canvasContext:canvas.getContext("2d"), viewport}).promise;
+  }
+} catch (e) {
+  status.textContent = "Unable to load document";
+  console.error(e);
+}
+
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && ["s","p","u"].includes(e.key.toLowerCase())) e.preventDefault();
+  if (e.key === "F12") e.preventDefault();
+});
+</script>
+</body>
+</html>
